@@ -1,0 +1,11 @@
+{
+  "autoUpdate": false,
+  "autoLogin": false,
+  "apiServer": "",
+  "apiKey": "",
+  "credentials": {
+    "email": "",
+    "password": "",
+    "twofactor": ""
+  }
+}
