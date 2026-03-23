@@ -1,10 +1,7 @@
-name: Publish to npm
+name: Publish to npm (Direct)
 
 on:
-  workflow_dispatch:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:   # تشغيل يدوي من GitHub Actions فقط
 
 permissions:
   contents: read
