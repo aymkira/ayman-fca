@@ -1,0 +1,9 @@
+{
+  "name": "ayman-fca-ultra",
+  "version": "1.0.0",
+  "description": "AYMAN-FCA Ultra Core — Production-grade Facebook Chat API Engine",
+  "main": "index.js",
+  "author": { "name": "Ayman" },
+  "license": "MIT",
+  "engines": { "node": ">=16.0.0" }
+}
