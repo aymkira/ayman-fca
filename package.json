@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "echo \"ayman-fca v1.0 by Ayman\""
+    "test": "echo \"ayman-fca v1.0.1 by Ayman\""
   },
   "repository": {
     "type": "git",
