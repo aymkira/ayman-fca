@@ -1,24 +1,15 @@
 // ============================================================
 //  AYMAN-FCA v2.0 — MQTT Core Connection
 //  © 2025 Ayman. All Rights Reserved.
-//
-//  🔑 أسرار الاستمرارية في هذا الملف:
-//  • UUID جديد لكل دورة اتصال (يخدع Facebook)
-//  • keepalive 60s (أكثر استقراراً من 10s)
-//  • connectTimeout 15s (كافٍ للشبكات البطيئة)
-//  • User-Agent عشوائي في كل اتصال
-//  • معالجة offline/close/error بذكاء
-//  • حد أقصى 15 محاولة مع backoff تصاعدي
 // ============================================================
 "use strict";
 
 const { formatID } = require("../../../utils/format");
 
-const DEFAULT_RECONNECT_MS  = 3000;
-const T_MS_WAIT_MS          = 12000;
-const MAX_RECONNECT         = 15;
+const DEFAULT_RECONNECT_MS = 3000;
+const T_MS_WAIT_MS         = 12000;
+const MAX_RECONNECT        = 15;
 
-// ✅ من ws3: UUID جديد لكل دورة — يمنع Facebook من تتبع الجلسة
 function generateUUID() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
@@ -26,11 +17,42 @@ function generateUUID() {
   });
 }
 
-// ✅ User-Agent عشوائي لكل اتصال MQTT
-const CHROME_VERSIONS = ["120.0.0.0","122.0.0.0","124.0.0.0","126.0.0.0"];
+const CHROME_VERSIONS = ["120.0.0.0", "122.0.0.0", "124.0.0.0", "126.0.0.0"];
 function randomUA() {
   const v = CHROME_VERSIONS[Math.floor(Math.random() * CHROME_VERSIONS.length)];
   return `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${v} Safari/537.36`;
+}
+
+// ── Banner ───────────────────────────────────────────────────
+let _bannerShown = false;
+function showBanner() {
+  if (_bannerShown) return;
+  _bannerShown = true;
+  const R = "\x1b[0m", B = "\x1b[1m";
+  const CY = "\x1b[36m", GD = "\x1b[33m", GR = "\x1b[32m", MG = "\x1b[35m", BL = "\x1b[34m";
+  const lines = [
+    "",
+    `${CY}${B}  █████╗ ██╗   ██╗███╗   ███╗ █████╗ ███╗   ██╗${R}`,
+    `${CY}${B} ██╔══██╗╚██╗ ██╔╝████╗ ████║██╔══██╗████╗  ██║${R}`,
+    `${GD}${B} ███████║ ╚████╔╝ ██╔████╔██║███████║██╔██╗ ██║${R}`,
+    `${GD}${B} ██╔══██║  ╚██╔╝  ██║╚██╔╝██║██╔══██║██║╚██╗██║${R}`,
+    `${MG}${B} ██║  ██║   ██║   ██║ ╚═╝ ██║██║  ██║██║ ╚████║${R}`,
+    `${MG}${B} ╚═╝  ╚═╝   ╚═╝   ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝${R}`,
+    "",
+    `${BL}${B}  ███████╗ ██████╗ █████╗ ${R}`,
+    `${BL}${B}  ██╔════╝██╔════╝██╔══██╗${R}`,
+    `${CY}${B}  █████╗  ██║     ███████║${R}`,
+    `${CY}${B}  ██╔══╝  ██║     ██╔══██║${R}`,
+    `${GR}${B}  ██║     ╚██████╗██║  ██║${R}`,
+    `${GR}${B}  ╚═╝      ╚═════╝╚═╝  ╚═╝${R}`,
+    "",
+    `${GD}${B}  ╔══════════════════════════════════════╗${R}`,
+    `${GD}${B}  ║   AYMAN-FCA v2.0  —  by Ayman  🚀   ║${R}`,
+    `${GD}${B}  ║   Facebook Chat API for Node.js      ║${R}`,
+    `${GD}${B}  ╚══════════════════════════════════════╝${R}`,
+    "",
+  ];
+  lines.forEach(l => process.stderr.write(l + "\n"));
 }
 
 module.exports = function createListenMqtt(deps) {
@@ -46,23 +68,17 @@ module.exports = function createListenMqtt(deps) {
     function scheduleReconnect(delayMs) {
       if (ctx._reconnectTimer) return;
       if (ctx._ending) return;
-
       if (ctx._reconnectAttempts >= MAX_RECONNECT) {
         logger(`[ AYMAN ] MQTT وصل الحد الأقصى (${MAX_RECONNECT}) — إيقاف`, "error");
         ctx._reconnectAttempts = 0;
         globalCallback({ type: "stop_listen", error: "max_reconnect_reached" }, null);
         return;
       }
-
-      const d  = ctx._mqttOpt?.reconnectDelayMs || DEFAULT_RECONNECT_MS;
-      const ms = typeof delayMs === "number" ? delayMs : d;
+      const ms = typeof delayMs === "number" ? delayMs : (ctx._mqttOpt?.reconnectDelayMs || DEFAULT_RECONNECT_MS);
       ctx._reconnectAttempts++;
-
       logger(`[ AYMAN ] MQTT إعادة اتصال بعد ${ms}ms (${ctx._reconnectAttempts}/${MAX_RECONNECT})`, "warn");
-
       ctx._reconnectTimer = setTimeout(() => {
         ctx._reconnectTimer = null;
-        // ✅ UUID جديد عند كل إعادة اتصال
         ctx.clientId = generateUUID();
         if (!ctx._ending) listenMqtt(defaultFuncs, api, ctx, globalCallback);
       }, ms);
@@ -94,29 +110,28 @@ module.exports = function createListenMqtt(deps) {
       protocolId:      "MQIsdp",
       protocolVersion: 3,
       username:        JSON.stringify(username),
-      clean:           true,
+      clean:           false,   // ✅ إصلاح puback error
       wsOptions: {
         headers: {
-          Cookie:                   cookies,
-          Origin:                   "https://www.facebook.com",
-          "User-Agent":             ua,
-          Referer:                  "https://www.facebook.com/",
-          Host:                     "edge-chat.facebook.com",
-          Connection:               "Upgrade",
-          Pragma:                   "no-cache",
-          "Cache-Control":          "no-cache",
-          Upgrade:                  "websocket",
-          "Sec-WebSocket-Version":  "13",
-          "Accept-Encoding":        "gzip, deflate, br",
-          "Accept-Language":        "ar,en-US;q=0.9,en;q=0.8",
+          Cookie:                     cookies,
+          Origin:                     "https://www.facebook.com",
+          "User-Agent":               ua,
+          Referer:                    "https://www.facebook.com/",
+          Host:                       "edge-chat.facebook.com",
+          Connection:                 "Upgrade",
+          Pragma:                     "no-cache",
+          "Cache-Control":            "no-cache",
+          Upgrade:                    "websocket",
+          "Sec-WebSocket-Version":    "13",
+          "Accept-Encoding":          "gzip, deflate, br",
+          "Accept-Language":          "ar,en-US;q=0.9,en;q=0.8",
           "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits"
         },
-        origin:          "https://www.facebook.com",
-        protocolVersion: 13,
-        binaryType:      "arraybuffer",
+        origin:           "https://www.facebook.com",
+        protocolVersion:  13,
+        binaryType:       "arraybuffer",
         handshakeTimeout: 15000
       },
-      // ✅ keepalive 60s — أكثر استقراراً
       keepalive:       60,
       reschedulePings: true,
       reconnectPeriod: 0,
@@ -133,17 +148,13 @@ module.exports = function createListenMqtt(deps) {
     );
     const mqttClient = ctx.mqttClient;
 
-    // ─── Error ───────────────────────────────────────────────
     mqttClient.on("error", function(err) {
       const msg = String(err?.message || err || "");
-
       if ((ctx._ending || ctx._cycling) && /No subscription existed|client disconnecting/i.test(msg)) return;
-
       if (/Not logged in|blocked the login|401|403/i.test(msg)) {
         try { if (mqttClient?.connected) mqttClient.end(true); } catch (_) {}
         return emitAuth(ctx, api, globalCallback, /blocked/i.test(msg) ? "login_blocked" : "not_logged_in", msg);
       }
-
       logger(`[ AYMAN ] MQTT خطأ: ${msg}`, "error");
       try { if (mqttClient?.connected) mqttClient.end(true); } catch (_) {}
       if (ctx._ending || ctx._cycling) return;
@@ -151,10 +162,9 @@ module.exports = function createListenMqtt(deps) {
       else globalCallback({ type: "stop_listen", error: msg }, null);
     });
 
-    // ─── Connect ─────────────────────────────────────────────
     mqttClient.on("connect", function() {
       ctx._reconnectAttempts = 0;
-
+      showBanner();
       if (!process.env.AymanFcaOnline) {
         logger("[ AYMAN-FCA ] KIRA متصل بـ Facebook ✅", "info");
         process.env.AymanFcaOnline = "1";
@@ -177,7 +187,6 @@ module.exports = function createListenMqtt(deps) {
       mqttClient.publish("/foreground_state", JSON.stringify({ foreground: chatOn }), { qos: 1 });
       mqttClient.publish("/set_client_settings", JSON.stringify({ make_user_available_when_in_foreground: true }), { qos: 1 });
 
-      // ✅ T_MS_WAIT timeout
       let rTimeout = setTimeout(() => {
         rTimeout = null;
         if (ctx._ending) return;
@@ -195,7 +204,6 @@ module.exports = function createListenMqtt(deps) {
       };
     });
 
-    // ─── Message ─────────────────────────────────────────────
     mqttClient.on("message", function(topic, message) {
       if (ctx._ending) return;
       try {
@@ -239,7 +247,6 @@ module.exports = function createListenMqtt(deps) {
       }
     });
 
-    // ─── Close / Offline / Disconnect ────────────────────────
     mqttClient.on("close", function() {
       if (ctx._ending || ctx._cycling) return;
       logger("[ AYMAN ] MQTT انقطع — إعادة اتصال", "warn");
