@@ -1,6 +1,6 @@
 {
   "name": "ayman-fca",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Facebook Chat API for Node.js — مكتبة KIRA بوت | © 2025 Ayman",
   "main": "index.js",
   "types": "index.d.ts",
