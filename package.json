@@ -1,23 +1,12 @@
 {
   "name": "ayman-fca",
   "version": "1.0.3",
-  "description": "Facebook Chat API for Node.js  Ayman",
+  "description": "Facebook Chat API for Node.js — مكتبة KIRA بوت | © 2025 Ayman",
   "main": "index.js",
   "types": "index.d.ts",
   "exports": {
     ".": {
       "require": "./index.js",
-      "default": "./index.js",
-      "types": "./index.d.ts"
-    }
-  },
-  "files": [
-    "index.js",
-    "index.d.ts",
-    "module/",
-    "func/",
-    "src/",
-    "REA": "./index.js",
       "default": "./index.js",
       "types": "./index.d.ts"
     }
