@@ -1,6 +1,6 @@
 // ============================================================
 //  AYMAN-FCA v2.0 — ULTRA MASTER ENGINE
-//  © 2025 Ayman. All Rights Reserved.
+//  © 2026 Ayman. All Rights Reserved.
 //
 //  يجمع كل الأنظمة:
 //  ① SessionManager   — جلسة + backup + validate
@@ -20,7 +20,9 @@
 const EventEmitter      = require("events");
 const path              = require("path");
 
+// المسار المصحح للوصول إلى المجلد الوظيفي في الجذر
 const logger            = require("../func/logger");
+
 const SessionManager    = require("./core/sessionManager");
 const ReconnectEngine   = require("./core/reconnectEngine");
 const KeepAliveEngine   = require("./core/keepAliveEngine");
@@ -59,36 +61,32 @@ class AymanFCAUltra extends EventEmitter {
     this.geo       = new GeoGuard({ lockRegion: true });
 
     this._wireSystems();
-    logger.banner();
+    // تأكد أن logger يحتوي على دالة banner لتجنب الأخطاء
+    if (logger && typeof logger.banner === "function") logger.banner();
   }
 
   // ── ربط الأنظمة ببعضها ──────────────────────────────────
   _wireSystems() {
-    // Watchdog → restart
     this.watchdog.on(EVENTS.WATCHDOG_RESTART, ({ reasons }) => {
       this.health.penalize("mqtt_dead");
       this._restart("watchdog: " + reasons);
     });
 
-    // Health Critical → restart
     this.health.on(EVENTS.HEALTH_CRITICAL, ({ score }) => {
       logger.error(`Health منخفض (${score}) — restart`, "ULTRA");
       this._restart("health_critical");
     });
 
-    // Session Expired → restart
     this.session.on(EVENTS.SESSION_EXPIRED, () => {
       this.health.penalize("session_expired");
       this._restart("session_expired");
     });
 
-    // Memory High → risk up + pause queue
     this.memory.on(EVENTS.MEMORY_HIGH, () => {
       this.health.penalize("memory_high");
       this.queue.setRiskLevel("high");
     });
 
-    // Silent Mode → pause queue
     this.silent.on("silent:enter", () => {
       this.queue.pause("silent_mode");
       this.cooldown.recordError();
@@ -97,7 +95,6 @@ class AymanFCAUltra extends EventEmitter {
       this.queue.resume();
     });
 
-    // Reconnect events
     this.reconnect.on(EVENTS.RECONNECT_DONE, () => {
       this.health.reward("reconnect_done");
       this.cooldown.reset();
@@ -107,21 +104,17 @@ class AymanFCAUltra extends EventEmitter {
       this.health.penalize("reconnect_fail");
     });
 
-    // Geo instability
     this.geo.on("region:unstable", () => {
       logger.warn("GeoGuard: عدم استقرار — Silent Mode", "ULTRA");
       this.silent.enterSilentMode("geo_instability");
     });
 
-    // Cooldown → Smart Queue speed
-    // health low → risk up
     this.health.on(EVENTS.HEALTH_LOW, () => {
       this.queue.setRiskLevel("high");
       this.cooldown.recordError();
     });
   }
 
-  // ── استخراج ctx ─────────────────────────────────────────
   _extractCtx(api) {
     for (const k of Object.getOwnPropertyNames(api)) {
       try {
@@ -132,7 +125,6 @@ class AymanFCAUltra extends EventEmitter {
     return null;
   }
 
-  // ── تشغيل كل الأنظمة بعد Login ─────────────────────────
   _startSystems(api, ctx) {
     this.session.attach(api);
     this.keepAlive.attach(api, ctx);
@@ -141,10 +133,8 @@ class AymanFCAUltra extends EventEmitter {
       if (ctx?.tasks instanceof Map && ctx.tasks.size > 100) ctx.tasks.clear();
     });
 
-    // تسجيل region
     if (ctx?.region) this.geo.recordRegion(ctx.region);
 
-    // تشغيل الأنظمة
     this.session.start();
     this.keepAlive.start();
     this.watchdog.start();
@@ -157,20 +147,17 @@ class AymanFCAUltra extends EventEmitter {
     this.emit("ready", { uid: ctx?.userID });
   }
 
-  // ── إيقاف كل الأنظمة ────────────────────────────────────
   _stopSystems() {
     ["session","keepAlive","watchdog","health","memory","queue","behavior","silent"].forEach(s => {
       try { this[s].stop(); } catch(_) {}
     });
   }
 
-  // ── إعادة تشغيل ذكية (Soft Restart) ─────────────────────
   async _restart(reason) {
     if (this._restarting) return;
     this._restarting = true;
     logger.warn(`ULTRA: إعادة تشغيل — ${reason}`, "ULTRA");
 
-    // Soft restart بدل Hard restart
     const ok = await this.silent.softRestart(async () => {
       this._stopSystems();
       try {
@@ -188,13 +175,11 @@ class AymanFCAUltra extends EventEmitter {
     this._restarting = false;
   }
 
-  // ── بناء Listener Callback ────────────────────────────────
   buildListenerCallback() {
     return (error, message) => {
       if (error) {
         if (error?.type === "stop_listen") return;
 
-        // Silent Mode إذا لزم
         if (this.silent.shouldGoSilent(error)) {
           this.silent.handleError(error, () => this._restart("silent_recovery"));
           return;
@@ -214,12 +199,10 @@ class AymanFCAUltra extends EventEmitter {
 
       if (!message) return;
 
-      // تحديث Watchdog + Health
       this.watchdog.heartbeat();
       this.health.reward("message_ok");
       this.cooldown.recordSuccess();
 
-      // تحديث Geo إذا تغير
       if (message.region) this.geo.recordRegion(message.region);
 
       if (["presence","typ","read_receipt"].includes(message.type)) return;
@@ -231,7 +214,6 @@ class AymanFCAUltra extends EventEmitter {
     };
   }
 
-  // ── ربط بـ API بعد Login ──────────────────────────────────
   async attachToApi(api) {
     this._api = api;
     this._ctx = this._extractCtx(api);
@@ -242,26 +224,20 @@ class AymanFCAUltra extends EventEmitter {
       logger.info(`ULTRA مرتبط | UID: ${this._ctx.userID} | Region: ${this._ctx.region || "?"}`, "ULTRA");
     }
 
-    // Connection Warm-Up قبل أي نشاط
     await this.behavior.warmUp();
 
-    // حفظ الجلسة فوراً
     try { this.session.save(api.getAppState(), true); } catch(_) {}
 
-    // تشغيل الأنظمة
     this._startSystems(api, this._ctx || {});
 
     return api;
   }
 
-  // ── wrap sendMessage بـ Queue + Cooldown ─────────────────
   wrapSendMessage(api) {
     const original = api.sendMessage.bind(api);
     api.sendMessage = (msg, threadID, callback, messageID) => {
-      // Anti-Repeat
       this.behavior.antiRepeatDelay("send", typeof msg === "string" ? msg.slice(0, 30) : "obj");
 
-      // Queue
       this.queue.enqueue(async () => {
         await this.cooldown.waitBeforeSend();
         const start = Date.now();
@@ -277,14 +253,12 @@ class AymanFCAUltra extends EventEmitter {
     logger.info("ULTRA: sendMessage wrapped ✅", "ULTRA");
   }
 
-  // ── إيقاف آمن ────────────────────────────────────────────
   async stop() {
     this._stopSystems();
     try { if (this._api?.stopListening) this._api.stopListening(); } catch(_) {}
     logger.info("ULTRA: موقوف ✅", "ULTRA");
   }
 
-  // ── Getters ───────────────────────────────────────────────
   get api()         { return this._api; }
   get ctx()         { return this._ctx; }
   getHealth()       { return this.health.getStats(); }
