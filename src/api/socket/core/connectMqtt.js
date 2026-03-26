@@ -1,14 +1,30 @@
 // ============================================================
-//  AYMAN-FCA v2.0 — MQTT Core Connection
+//  AYMAN-FCA v2.0 — MQTT Core Connection [FIXED]
 //  © 2025 Ayman. All Rights Reserved.
+//
+//  الإصلاحات:
+//  ✅ keepalive: 10  (كان 60 — السبب الرئيسي للانقطاع)
+//  ✅ clean: true    (كان false — يُسبب puback errors)
+//  ✅ reconnectPeriod: 1000  (كان 0 — يُغرق الشبكة)
+//  ✅ T_MS_WAIT_MS: 30000   (كان 12000 — قصير جداً)
+//  ✅ MAX_RECONNECT: Infinity (كان 15 — بعدها يموت نهائياً)
+//  ✅ exponential backoff لـ reconnect (بدلاً من delay ثابت)
+//  ✅ foreground heartbeat كل 8 دقائق داخل MQTT
 // ============================================================
 "use strict";
 
 const { formatID } = require("../../../utils/format");
 
-const DEFAULT_RECONNECT_MS = 3000;
-const T_MS_WAIT_MS         = 12000;
-const MAX_RECONNECT        = 15;
+const DEFAULT_RECONNECT_MS = 2000;
+const T_MS_WAIT_MS         = 30000;   // ✅ كان 12000 — زيادة للشبكات البطيئة
+const MAX_RECONNECT        = Infinity; // ✅ كان 15 — لا توقف نهائي
+
+// Backoff: 2s, 4s, 8s, 16s, 30s, 30s, 30s...
+function calcBackoff(attempt) {
+  const base = Math.min(DEFAULT_RECONNECT_MS * Math.pow(2, attempt), 30000);
+  const jitter = Math.random() * 1000;
+  return Math.round(base + jitter);
+}
 
 function generateUUID() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -65,18 +81,21 @@ module.exports = function createListenMqtt(deps) {
 
     if (typeof ctx._reconnectAttempts !== "number") ctx._reconnectAttempts = 0;
 
+    // ✅ exponential backoff — لا يتوقف أبداً
     function scheduleReconnect(delayMs) {
       if (ctx._reconnectTimer) return;
       if (ctx._ending) return;
-      if (ctx._reconnectAttempts >= MAX_RECONNECT) {
-        logger(`[ AYMAN ] MQTT وصل الحد الأقصى (${MAX_RECONNECT}) — إيقاف`, "error");
-        ctx._reconnectAttempts = 0;
-        globalCallback({ type: "stop_listen", error: "max_reconnect_reached" }, null);
-        return;
-      }
-      const ms = typeof delayMs === "number" ? delayMs : (ctx._mqttOpt?.reconnectDelayMs || DEFAULT_RECONNECT_MS);
+
+      const ms = typeof delayMs === "number"
+        ? delayMs
+        : calcBackoff(ctx._reconnectAttempts);
+
       ctx._reconnectAttempts++;
-      logger(`[ AYMAN ] MQTT إعادة اتصال بعد ${ms}ms (${ctx._reconnectAttempts}/${MAX_RECONNECT})`, "warn");
+
+      // بعد 20 محاولة: أعد العداد إلى 10 (يبقى عند ~30s)
+      if (ctx._reconnectAttempts > 20) ctx._reconnectAttempts = 10;
+
+      logger(`[ AYMAN ] MQTT إعادة اتصال #${ctx._reconnectAttempts} بعد ${ms}ms`, "warn");
       ctx._reconnectTimer = setTimeout(() => {
         ctx._reconnectTimer = null;
         ctx.clientId = generateUUID();
@@ -110,7 +129,7 @@ module.exports = function createListenMqtt(deps) {
       protocolId:      "MQIsdp",
       protocolVersion: 3,
       username:        JSON.stringify(username),
-      clean:           false,   // ✅ إصلاح puback error
+      clean:           true,    // ✅ كان false — true أفضل مع syncToken
       wsOptions: {
         headers: {
           Cookie:                     cookies,
@@ -130,12 +149,12 @@ module.exports = function createListenMqtt(deps) {
         origin:           "https://www.facebook.com",
         protocolVersion:  13,
         binaryType:       "arraybuffer",
-        handshakeTimeout: 15000
+        handshakeTimeout: 20000
       },
-      keepalive:       60,
+      keepalive:       10,      // ✅ كان 60 — Facebook يحتاج ping كل 10s
       reschedulePings: true,
-      reconnectPeriod: 0,
-      connectTimeout:  15000
+      reconnectPeriod: 1000,    // ✅ كان 0 — 1s انتظار قبل retry
+      connectTimeout:  20000    // ✅ كان 15000 — زيادة للشبكات البطيئة
     };
 
     if (ctx.globalOptions?.proxy) {
@@ -187,6 +206,17 @@ module.exports = function createListenMqtt(deps) {
       mqttClient.publish("/foreground_state", JSON.stringify({ foreground: chatOn }), { qos: 1 });
       mqttClient.publish("/set_client_settings", JSON.stringify({ make_user_available_when_in_foreground: true }), { qos: 1 });
 
+      // ✅ foreground heartbeat كل 8 دقائق (يُثبت النشاط لـ Facebook)
+      if (ctx._fgHeartbeat) clearInterval(ctx._fgHeartbeat);
+      ctx._fgHeartbeat = setInterval(() => {
+        try {
+          if (!mqttClient?.connected) return;
+          mqttClient.publish("/foreground_state", JSON.stringify({ foreground: true }), { qos: 0 });
+          mqttClient.publish("/set_client_settings", JSON.stringify({ make_user_available_when_in_foreground: true }), { qos: 0 });
+        } catch (_) {}
+      }, 8 * 60 * 1000);
+
+      // ✅ T_MS_WAIT_MS مرفوع إلى 30s
       let rTimeout = setTimeout(() => {
         rTimeout = null;
         if (ctx._ending) return;
@@ -248,6 +278,8 @@ module.exports = function createListenMqtt(deps) {
     });
 
     mqttClient.on("close", function() {
+      // ✅ تنظيف heartbeat عند الإغلاق
+      if (ctx._fgHeartbeat) { clearInterval(ctx._fgHeartbeat); ctx._fgHeartbeat = null; }
       if (ctx._ending || ctx._cycling) return;
       logger("[ AYMAN ] MQTT انقطع — إعادة اتصال", "warn");
       if (ctx.globalOptions?.autoReconnect !== false && !ctx._reconnectTimer) scheduleReconnect();
