@@ -1,47 +1,38 @@
-// ═══════════════════════════════════════════════════════════════
-//  AYMAN-FCA ULTRA v4.0 — KIRA BOT
-//  © 2026 Ayman | كيرا بوت | All Rights Reserved.
-//  أقوى مكتبة FCA في العالم — ما تطلع أبدًا يا زلمة
-//  لهجة بغدادية: يلا خلينا نحمي البوت من كل شي
-// ═══════════════════════════════════════════════════════════════
-
+// ============================================================
+//  AYMAN-FCA ULTRA CORE — Config
+//  © 2025 Ayman. All Rights Reserved.
+// ============================================================
 "use strict";
 
 module.exports = {
   session: {
-    validateEvery:  8 * 60 * 1000,     // كل 8 دقايق نشيك على الجلسة
-    saveEvery:      5 * 60 * 1000,     // حفظ كل 5 دقايق
-    backupCount:    7,                 // 7 نسخ احتياطية (زودتها)
-    refreshEvery:   60 * 60 * 1000     // تجديد كل ساعة
+    validateEvery:  5  * 60 * 1000,   // 5 دقائق
+    refreshEvery:   10 * 60 * 1000,   // 10 دقائق
+    saveEvery:      8  * 60 * 1000,   // 8 دقائق
+    backupCount:    3
   },
-
   reconnect: {
-    delays:     [1500, 4000, 8000, 15000, 30000, 60000, 120000, 240000],
-    maxRetries: 30                     // صمود أكثر
+    delays:  [1000, 3000, 5000, 10000, 30000, 60000, 120000],
+    maxRetries: 20
   },
-
   keepAlive: {
-    interval: 2 * 60 * 1000            // كل دقيقتين نرسل keep alive
+    interval: 4 * 60 * 1000           // 4 دقائق
   },
-
   watchdog: {
-    interval:      45 * 1000,          // نشيك كل 45 ثانية
-    maxSilenceMs:  4 * 60 * 1000,      // 4 دقايق صمت = خطر
-    maxLatencyMs:  8000
+    interval:        60 * 1000,       // دقيقة
+    maxSilenceMs:    5 * 60 * 1000,   // 5 دقائق بدون event
+    maxLatencyMs:    10000
   },
-
   memory: {
-    threshold:     0.78,               // 78% RAM = تنظيف فوري
-    checkInterval: 90 * 1000
+    threshold:       0.80,
+    checkInterval:   2 * 60 * 1000
   },
-
   requestQueue: {
-    rateMs:   1100,                    // أسرع شوية بس ما نسبب بان
-    maxSize:   600
+    rateMs:          1500,
+    maxSize:         500
   },
-
   healthScore: {
-    initial:      100,
-    restartBelow: 32                   // لو نزل تحت 32 = restart تلقائي
+    initial:         100,
+    restartBelow:    40
   }
 };
