@@ -21,7 +21,7 @@ const EventEmitter      = require("events");
 const path              = require("path");
 
 // المسار المصحح للوصول إلى المجلد الوظيفي في الجذر
-const logger            = require("../func/logger");
+const logger = require("./func/logger");
 
 const SessionManager    = require("./core/sessionManager");
 const ReconnectEngine   = require("./core/reconnectEngine");
